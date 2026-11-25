@@ -1,6 +1,15 @@
 const loginForm = document.getElementById("login-form");
 const loginButton = document.getElementById("login-button");
 const loginMessage = document.getElementById("login-message");
+const passwordInput = document.getElementById("password");
+const togglePasswordButton = document.getElementById("toggle-password");
+
+togglePasswordButton.addEventListener("click", () => {
+  const showing = passwordInput.type === "text";
+  passwordInput.type = showing ? "password" : "text";
+  togglePasswordButton.textContent = showing ? "Show" : "Hide";
+  togglePasswordButton.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+});
 
 async function checkExistingLogin() {
   const storedError = window.sessionStorage.getItem("loginError");
@@ -11,7 +20,7 @@ async function checkExistingLogin() {
   }
 
   if (!window.configReady) {
-    loginMessage.textContent = "Open js/config.js and enter your Supabase URL and publishable key.";
+    loginMessage.textContent = window.configError;
     loginMessage.className = "message error";
     loginButton.disabled = true;
     return;
@@ -31,10 +40,19 @@ loginForm.addEventListener("submit", async event => {
 
   const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
-  const { error } = await window.dbClient.auth.signInWithPassword({ email, password });
+  let error;
+
+  try {
+    const result = await window.dbClient.auth.signInWithPassword({ email, password });
+    error = result.error;
+  } catch {
+    error = { message: "Could not connect to Supabase. Check the project URL and your internet connection." };
+  }
 
   if (error) {
-    loginMessage.textContent = error.message;
+    loginMessage.textContent = error.message.toLowerCase().includes("invalid path")
+      ? "The Supabase Project URL is incorrect. Use only https://your-project-ref.supabase.co in js/config.js."
+      : error.message;
     loginMessage.className = "message error";
     loginButton.disabled = false;
     return;
