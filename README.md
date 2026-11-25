@@ -10,6 +10,13 @@ The website is hosted using GitHub Pages. Supabase provides PostgreSQL, authenti
 - Approved-staff authorization
 - Dashboard with live database totals
 - Add, search, update, and delete operations
+- Column filters and sortable table headings
+- Pagination and selectable page sizes
+- Live record and report result counts
+- Status badges and direct row editing
+- One-click data refresh and CSV export
+- Light and dark interface themes
+- Dashboard quick actions for common records
 - Departments, doctors, patients, rooms, appointments, admissions, medical records, prescriptions, medications, bills, and payments
 - Prepared joined reports
 - CSV export
