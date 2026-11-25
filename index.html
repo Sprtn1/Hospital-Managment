@@ -3,22 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hospital DB Login</title>
+  <title>Hospital Management | Staff Login</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="login-page">
-  <main class="login-card">
-    <div class="brand-mark">H</div>
-    <h1>Hospital Database</h1>
-    <p class="muted">Authorized staff access</p>
-    <form id="login-form" class="login-form">
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" autocomplete="username" required>
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required>
-      <button id="login-button" type="submit" class="button primary full">Sign In</button>
-    </form>
-    <p id="login-message" class="message" aria-live="polite"></p>
+  <main class="login-shell">
+    <section class="login-intro">
+      <div class="login-brand"><span class="brand-mark">H</span><strong>Hospital Management</strong></div>
+      <div>
+        <span class="eyebrow">Secure staff workspace</span>
+        <h1>Everything your hospital team needs, in one place.</h1>
+        <p>Manage patients, appointments, admissions, medical records, prescriptions and billing through a clear central dashboard.</p>
+      </div>
+      <div class="login-feature-grid">
+        <span>Patient records</span>
+        <span>Appointments</span>
+        <span>Billing reports</span>
+      </div>
+    </section>
+    <section class="login-card">
+      <div class="mobile-login-brand"><span class="brand-mark">H</span></div>
+      <span class="eyebrow">Welcome back</span>
+      <h2>Sign in to your account</h2>
+      <p class="muted">Use your approved hospital staff credentials.</p>
+      <form id="login-form" class="login-form">
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" autocomplete="username" placeholder="name@hospital.com" required>
+        <label for="password">Password</label>
+        <div class="password-field">
+          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+          <button id="toggle-password" type="button" aria-label="Show password">Show</button>
+        </div>
+        <button id="login-button" type="submit" class="button primary full">Sign In</button>
+      </form>
+      <p id="login-message" class="message" aria-live="polite"></p>
+      <p class="login-help">Access is limited to active staff accounts.</p>
+    </section>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2"></script>
   <script src="js/config.js"></script>
