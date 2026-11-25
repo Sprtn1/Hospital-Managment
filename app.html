@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hospital Management Database</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="loading-screen" class="loading-screen">
+    <div class="spinner"></div>
+    <p>Loading hospital records</p>
+  </div>
+
+  <div id="app-shell" class="app-shell hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-mark small">H</div>
+        <div>
+          <strong>Hospital DB</strong>
+          <span>Management System</span>
+        </div>
+      </div>
+      <nav id="navigation" class="navigation"></nav>
+      <div class="sidebar-footer">
+        <span id="staff-email"></span>
+        <button id="logout-button" class="button ghost full">Sign Out</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button id="menu-button" class="menu-button" aria-label="Open navigation">☰</button>
+        <div>
+          <h1 id="page-title">Dashboard</h1>
+          <p id="page-subtitle" class="muted">Hospital database summary</p>
+        </div>
+      </header>
+
+      <section id="dashboard-page" class="page"></section>
+
+      <section id="entity-page" class="page hidden">
+        <div class="toolbar">
+          <div class="search-group">
+            <input id="search-input" type="search" placeholder="Search displayed records">
+            <button id="clear-search-button" class="button secondary">Clear</button>
+          </div>
+          <div class="toolbar-actions">
+            <button id="export-button" class="button secondary">Export CSV</button>
+            <button id="new-record-button" class="button primary">New Record</button>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead id="entity-head"></thead>
+              <tbody id="entity-body"></tbody>
+            </table>
+          </div>
+          <p id="entity-empty" class="empty-state hidden">No records found.</p>
+        </div>
+      </section>
+
+      <section id="reports-page" class="page hidden">
+        <div class="toolbar">
+          <select id="report-select"></select>
+          <div class="toolbar-actions">
+            <button id="run-report-button" class="button primary">Run Report</button>
+            <button id="export-report-button" class="button secondary">Export CSV</button>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead id="report-head"></thead>
+              <tbody id="report-body"></tbody>
+            </table>
+          </div>
+          <p id="report-empty" class="empty-state hidden">No records found.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="record-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="modal-title">Record</h2>
+        <button id="close-modal-button" class="icon-button" aria-label="Close">×</button>
+      </div>
+      <form id="record-form">
+        <div id="form-fields" class="form-grid"></div>
+        <div class="modal-actions">
+          <button id="delete-button" type="button" class="button danger hidden">Delete</button>
+          <div class="spacer"></div>
+          <button id="cancel-button" type="button" class="button secondary">Cancel</button>
+          <button id="save-button" type="submit" class="button primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
