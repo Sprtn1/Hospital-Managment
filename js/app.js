@@ -48,7 +48,7 @@ const ENTITIES = {
       field("room_type", "Room Type"),
       field("floor", "Floor", { type: "number" }),
       field("capacity", "Capacity", { type: "number" }),
-      field("availability_status", "Availability", { choices: ["Available", "Occupied", "Maintenance"] })
+      field("availability_status", "Availability", { choices: ["Available", "Beds Available", "Occupied", "Maintenance"] })
     ]
   },
   Appointments: {
@@ -312,7 +312,7 @@ function compareValues(first, second) {
 function statusClass(value) {
   const text = String(value).toLowerCase();
   if (["available", "paid", "completed", "active"].includes(text)) return "status-green";
-  if (["scheduled", "partially paid", "maintenance"].includes(text)) return "status-yellow";
+  if (["scheduled", "partially paid", "maintenance", "beds available"].includes(text)) return "status-yellow";
   if (["cancelled", "unpaid", "occupied", "inactive"].includes(text)) return "status-red";
   return "status-purple";
 }
@@ -505,6 +505,15 @@ async function getCount(table, filter = null) {
   return count || 0;
 }
 
+async function getCountIn(table, column, values) {
+  const { count, error } = await window.dbClient
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .in(column, values);
+  if (error) throw error;
+  return count || 0;
+}
+
 async function quickCreate(entityName) {
   await openEntity(entityName);
   await openRecordModal();
@@ -522,7 +531,7 @@ async function openDashboard() {
       getCount("patient"),
       getCount("doctor"),
       getCount("appointment", { column: "status", value: "Scheduled" }),
-      getCount("room", { column: "availability_status", value: "Available" }),
+      getCountIn("room", "availability_status", ["Available", "Beds Available"]),
       window.dbClient.from("bill_balance").select("bill_id", { count: "exact", head: true }).gt("balance", 0).then(result => {
         if (result.error) throw result.error;
         return result.count || 0;
@@ -560,7 +569,7 @@ async function openDashboard() {
       ["Patients", patients, "PT", "Patients"],
       ["Doctors", doctors, "DR", "Doctors"],
       ["Scheduled Appointments", appointments, "AP", "Appointments"],
-      ["Available Rooms", rooms, "RM", "Rooms"],
+      ["Rooms With Space", rooms, "RM", "Rooms"],
       ["Outstanding Bills", bills, "BL", "Bills"]
     ].forEach(([label, value, icon, entity]) => {
       const card = document.createElement("div");
