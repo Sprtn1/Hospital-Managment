@@ -68,7 +68,7 @@ create table public.room (
     room_type text not null,
     floor integer not null check (floor >= 0),
     capacity integer not null check (capacity > 0),
-    availability_status text not null check (availability_status in ('Available', 'Occupied', 'Maintenance'))
+    availability_status text not null check (availability_status in ('Available', 'Beds Available', 'Occupied', 'Maintenance'))
 );
 
 create table public.appointment (
@@ -192,25 +192,39 @@ set search_path = public, pg_temp
 as $$
 declare
     current_status text;
-    should_check boolean := false;
+    room_capacity integer;
+    active_admissions integer;
+    should_check boolean;
 begin
-    if new.discharge_date is null then
-        if tg_op = 'INSERT' then
-            should_check := true;
-        else
-            should_check := new.room_number is distinct from old.room_number or old.discharge_date is not null;
-        end if;
+    should_check := new.discharge_date is null;
+
+    if tg_op = 'UPDATE' then
+        should_check := should_check and (
+            new.room_number is distinct from old.room_number
+            or old.discharge_date is not null
+        );
     end if;
 
     if should_check then
-        select availability_status
-        into current_status
+        select availability_status, capacity
+        into current_status, room_capacity
         from public.room
         where room_number = new.room_number
         for update;
 
-        if current_status is distinct from 'Available' then
-            raise exception 'The selected room is not available';
+        if current_status = 'Maintenance' then
+            raise exception 'The selected room is under maintenance';
+        end if;
+
+        select count(*)
+        into active_admissions
+        from public.admission
+        where room_number = new.room_number
+          and discharge_date is null
+          and admission_id is distinct from new.admission_id;
+
+        if active_admissions >= room_capacity then
+            raise exception 'The selected room has no available beds';
         end if;
     end if;
 
@@ -218,59 +232,67 @@ begin
 end;
 $$;
 
-create function private.occupy_room_after_admission()
-returns trigger
+create function private.refresh_room_status(target_room_number text)
+returns void
 language plpgsql
 set search_path = public, pg_temp
 as $$
+declare
+    room_capacity integer;
+    current_status text;
+    active_admissions integer;
 begin
+    select capacity, availability_status
+    into room_capacity, current_status
+    from public.room
+    where room_number = target_room_number
+    for update;
+
+    if current_status = 'Maintenance' then
+        return;
+    end if;
+
+    select count(*)
+    into active_admissions
+    from public.admission
+    where room_number = target_room_number
+      and discharge_date is null;
+
     update public.room
-    set availability_status = 'Occupied'
-    where room_number = new.room_number;
-    return new;
+    set availability_status = case
+        when active_admissions = 0 then 'Available'
+        when active_admissions < room_capacity then 'Beds Available'
+        else 'Occupied'
+    end
+    where room_number = target_room_number;
 end;
 $$;
 
-create function private.release_room_after_discharge()
+create function private.refresh_admission_room_status()
 returns trigger
 language plpgsql
 set search_path = public, pg_temp
 as $$
 begin
-    update public.room
-    set availability_status = 'Available'
-    where room_number = old.room_number;
+    if tg_op = 'DELETE' then
+        if old.discharge_date is null then
+            perform private.refresh_room_status(old.room_number);
+        end if;
+        return old;
+    end if;
+
+    if tg_op = 'UPDATE' and old.discharge_date is null and (
+        new.discharge_date is not null
+        or old.room_number is distinct from new.room_number
+    ) then
+        perform private.refresh_room_status(old.room_number);
+    end if;
+
+    if new.discharge_date is null then
+        perform private.refresh_room_status(new.room_number);
+    end if;
+
     return new;
-end;
-$$;
-
-create function private.change_admission_room()
-returns trigger
-language plpgsql
-set search_path = public, pg_temp
-as $$
-begin
-    update public.room
-    set availability_status = 'Available'
-    where room_number = old.room_number;
-
-    update public.room
-    set availability_status = 'Occupied'
-    where room_number = new.room_number;
-    return new;
-end;
-$$;
-
-create function private.release_room_after_admission_delete()
-returns trigger
-language plpgsql
-set search_path = public, pg_temp
-as $$
-begin
-    update public.room
-    set availability_status = 'Available'
-    where room_number = old.room_number;
-    return old;
 end;
 $$;
 
@@ -382,30 +404,17 @@ create trigger admission_room_check
 before insert or update of room_number, discharge_date on public.admission
 for each row execute function private.check_room_available();
 
-create trigger admission_room_occupied
+create trigger admission_room_status_insert
 after insert on public.admission
-for each row when (new.discharge_date is null)
-execute function private.occupy_room_after_admission();
+for each row execute function private.refresh_admission_room_status();
 
-create trigger admission_room_released
-after update of discharge_date on public.admission
-for each row when (old.discharge_date is null and new.discharge_date is not null)
-execute function private.release_room_after_discharge();
+create trigger admission_room_status_update
+after update of room_number, discharge_date on public.admission
+for each row execute function private.refresh_admission_room_status();
 
-create trigger admission_room_reoccupied
-after update of discharge_date on public.admission
-for each row when (old.discharge_date is not null and new.discharge_date is null)
-execute function private.occupy_room_after_admission();
-
-create trigger admission_room_changed
-after update of room_number on public.admission
-for each row when (new.discharge_date is null and old.room_number is distinct from new.room_number)
-execute function private.change_admission_room();
-
-create trigger admission_deleted_room_released
+create trigger admission_room_status_delete
 after delete on public.admission
-for each row when (old.discharge_date is null)
-execute function private.release_room_after_admission_delete();
+for each row execute function private.refresh_admission_room_status();
 
 create trigger prescription_stock_check
 before insert on public.prescription_item
@@ -475,9 +484,17 @@ join public.doctor d on a.doctor_id = d.doctor_id
 where a.discharge_date is null;
 
 create view public.available_rooms with (security_invoker = true) as
-select room_number, room_type, floor, capacity
-from public.room
-where availability_status = 'Available';
+select r.room_number, r.room_type, r.floor, r.capacity,
+       count(a.admission_id)::integer as occupied_beds,
+       (r.capacity - count(a.admission_id))::integer as beds_available,
+       r.availability_status
+from public.room r
+left join public.admission a
+       on a.room_number = r.room_number
+      and a.discharge_date is null
+where r.availability_status <> 'Maintenance'
+group by r.room_number, r.room_type, r.floor, r.capacity, r.availability_status
+having count(a.admission_id) < r.capacity;
 
 create view public.low_medication_stock with (security_invoker = true) as
 select medication_id, medication_name, quantity_available
