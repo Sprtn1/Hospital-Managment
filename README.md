@@ -21,7 +21,7 @@ The website is hosted using GitHub Pages. Supabase provides PostgreSQL, authenti
 - Departments, doctors, patients, rooms, appointments, admissions, medical records, prescriptions, medications, bills, and payments
 - Prepared joined reports
 - CSV export
-- Automatic room availability updates
+- Capacity-aware room and bed availability updates
 - Automatic medication stock updates
 - Automatic bill payment-status updates
 - Responsive desktop and mobile layout
@@ -33,7 +33,7 @@ Follow [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) from beginning to end.
 The short version is:
 
 1. Create a Supabase project.
-2. Run the four files in the `supabase` folder in the documented order.
+2. Run the files in the `supabase` folder in numerical order.
 3. Create a Supabase Auth user and approve it in `staff_profiles`.
 4. Copy the project URL and publishable key into `js/config.js`.
 5. Upload the repository contents to GitHub.
@@ -54,6 +54,7 @@ The short version is:
 | `supabase/02_seed_data.sql` | Sample hospital records |
 | `supabase/03_add_first_staff.sql` | Approves the first Auth user |
 | `supabase/04_verify_setup.sql` | Database verification queries |
+| `supabase/05_capacity_aware_rooms.sql` | Capacity-aware room status update for existing databases |
 | `DEPLOYMENT_GUIDE.md` | Complete setup instructions |
 | `SECURITY.md` | Required security rules |
 
