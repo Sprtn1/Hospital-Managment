@@ -30,6 +30,8 @@ The first SQL file resets the hospital tables. Run it only on a new project or w
 
 The database now contains the schema and sample hospital information.
 
+If the database was created before the capacity-aware room update, run `supabase/05_capacity_aware_rooms.sql` once. New databases created with the current `01_setup_database.sql` already include this behavior.
+
 ## 3 Create the First Login
 
 1. Open **Authentication** in Supabase.
@@ -107,7 +109,7 @@ The setup SQL already grants the required permissions and enables RLS. This dash
 3. Select **Run**.
 4. Confirm that every hospital table has records.
 5. Confirm that `rls_enabled` is `true` for every listed project table.
-6. Confirm that room `A201` is `Occupied` and the discharged admission rooms are `Available`.
+6. Confirm that room `A201` is `Occupied`, rooms with some free beds show `Beds Available`, and rooms without active admissions show `Available`.
 7. Confirm that bills 3 and 4 are `Paid`, bill 2 is `Partially Paid`, and bills 1 and 5 are `Unpaid`.
 
 Expected sample counts:
@@ -143,6 +145,8 @@ window.APP_CONFIG = {
   supabasePublishableKey: "your-browser-safe-publishable-key"
 };
 ```
+
+The URL must be the Project URL only. Do not use a dashboard address and do not add `/rest/v1`, `/auth/v1`, `/project/default`, or any other path after `.supabase.co`.
 
 Save the file.
 
