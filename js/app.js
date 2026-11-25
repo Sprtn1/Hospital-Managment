@@ -174,6 +174,7 @@ const state = {
   currentPage: 1,
   pageSize: 25,
   currentPageType: "dashboard",
+  lookupMaps: {},
   user: null,
   profile: null
 };
@@ -232,6 +233,68 @@ function formatDisplayValue(value) {
     if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleString();
   }
   return String(value);
+}
+
+const RELATION_LABELS = {
+  patient_id: "Patient",
+  doctor_id: "Doctor",
+  department_id: "Department",
+  manager_doctor_id: "Manager Doctor",
+  medication_id: "Medication",
+  bill_id: "Bill",
+  appointment_id: "Appointment",
+  admission_id: "Admission",
+  prescription_id: "Prescription"
+};
+
+function relationMapKey(column) {
+  return column === "manager_doctor_id" ? "doctor_id" : column;
+}
+
+function displayColumnLabel(column, primaryKey = null) {
+  if (column !== primaryKey && RELATION_LABELS[column]) return RELATION_LABELS[column];
+  return friendlyLabel(column);
+}
+
+function displayTableValue(row, column, primaryKey = null) {
+  const value = row[column];
+  if (column !== primaryKey && RELATION_LABELS[column]) {
+    const lookup = state.lookupMaps[relationMapKey(column)];
+    if (lookup?.has(String(value))) return lookup.get(String(value));
+  }
+  return formatDisplayValue(value);
+}
+
+function mapBy(items, keyField, labelBuilder) {
+  return new Map((items || []).map(item => [String(item[keyField]), labelBuilder(item)]));
+}
+
+async function loadLookupMaps() {
+  const requests = [
+    window.dbClient.from("patient").select("patient_id,name"),
+    window.dbClient.from("doctor").select("doctor_id,name"),
+    window.dbClient.from("department").select("department_id,department_name"),
+    window.dbClient.from("medication").select("medication_id,medication_name"),
+    window.dbClient.from("bill").select("bill_id,patient_id,total_amount"),
+    window.dbClient.from("appointment").select("appointment_id,patient_id,appointment_datetime"),
+    window.dbClient.from("admission").select("admission_id,patient_id,admission_date"),
+    window.dbClient.from("prescription").select("prescription_id,patient_id,prescription_date")
+  ];
+  const results = await Promise.all(requests);
+  const failed = results.find(result => result.error);
+  if (failed) throw failed.error;
+  const [patients, doctors, departments, medications, bills, appointments, admissions, prescriptions] = results.map(result => result.data || []);
+  const patientMap = mapBy(patients, "patient_id", item => item.name);
+  state.lookupMaps = {
+    patient_id: patientMap,
+    doctor_id: mapBy(doctors, "doctor_id", item => item.name),
+    department_id: mapBy(departments, "department_id", item => item.department_name),
+    medication_id: mapBy(medications, "medication_id", item => item.medication_name),
+    bill_id: mapBy(bills, "bill_id", item => `Bill #${item.bill_id} — ${patientMap.get(String(item.patient_id)) || "Patient"} — ${Number(item.total_amount).toFixed(2)}`),
+    appointment_id: mapBy(appointments, "appointment_id", item => `Appointment #${item.appointment_id} — ${patientMap.get(String(item.patient_id)) || "Patient"} — ${formatDisplayValue(item.appointment_datetime)}`),
+    admission_id: mapBy(admissions, "admission_id", item => `Admission #${item.admission_id} — ${patientMap.get(String(item.patient_id)) || "Patient"} — ${formatDisplayValue(item.admission_date)}`),
+    prescription_id: mapBy(prescriptions, "prescription_id", item => `Prescription #${item.prescription_id} — ${patientMap.get(String(item.patient_id)) || "Patient"} — ${formatDisplayValue(item.prescription_date)}`)
+  };
 }
 
 function compareValues(first, second) {
@@ -345,7 +408,7 @@ function createTable(head, body, rows, options = {}) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "sortable-header";
-      button.textContent = friendlyLabel(column);
+      button.textContent = displayColumnLabel(column, options.primaryKey);
       if (options.sortColumn === column) {
         const mark = document.createElement("span");
         mark.className = "sort-mark";
@@ -355,7 +418,7 @@ function createTable(head, body, rows, options = {}) {
       button.addEventListener("click", () => options.onSort(column));
       cell.appendChild(button);
     } else {
-      cell.textContent = friendlyLabel(column);
+      cell.textContent = displayColumnLabel(column, options.primaryKey);
     }
     headRow.appendChild(cell);
   });
@@ -374,7 +437,7 @@ function createTable(head, body, rows, options = {}) {
     }
     columns.forEach(column => {
       const cell = document.createElement("td");
-      const displayValue = formatDisplayValue(row[column]);
+      const displayValue = displayTableValue(row, column, options.primaryKey);
       if (isStatusColumn(column) && displayValue) {
         const badge = document.createElement("span");
         badge.className = `status-badge ${statusClass(displayValue)}`;
@@ -579,7 +642,7 @@ function populateEntityFilters() {
   columns.forEach(column => {
     const option = document.createElement("option");
     option.value = column;
-    option.textContent = friendlyLabel(column);
+    option.textContent = displayColumnLabel(column, config.pk);
     elements.filterColumn.appendChild(option);
   });
   elements.filterColumn.value = columns.includes(currentValue) ? currentValue : "";
@@ -607,7 +670,7 @@ function updateFilterValueControl() {
   } else {
     control = document.createElement("input");
     control.type = "search";
-    control.placeholder = column ? `Filter ${friendlyLabel(column)}` : "Filter value";
+    control.placeholder = column ? `Filter ${displayColumnLabel(column, config.pk)}` : "Filter value";
   }
   control.id = "filter-value";
   control.value = previousValue;
@@ -625,20 +688,21 @@ function updateFilterValueControl() {
 }
 
 function filterEntityRows() {
+  const config = ENTITIES[state.currentEntityName];
   const search = elements.searchInput.value.trim().toLowerCase();
   const filterColumn = elements.filterColumn.value;
   const filterValue = elements.filterValue.value.trim().toLowerCase();
   let rows = search
-    ? state.currentRows.filter(row => Object.values(row).some(value => formatDisplayValue(value).toLowerCase().includes(search)))
+    ? state.currentRows.filter(row => Object.keys(row).some(column => displayTableValue(row, column, config.pk).toLowerCase().includes(search)))
     : [...state.currentRows];
 
   if (filterColumn && filterValue) {
-    rows = rows.filter(row => formatDisplayValue(row[filterColumn]).toLowerCase().includes(filterValue));
+    rows = rows.filter(row => displayTableValue(row, filterColumn, config.pk).toLowerCase().includes(filterValue));
   }
 
   if (state.sortColumn) {
     const direction = state.sortDirection === "asc" ? 1 : -1;
-    rows.sort((first, second) => compareValues(first[state.sortColumn], second[state.sortColumn]) * direction);
+    rows.sort((first, second) => compareValues(displayTableValue(first, state.sortColumn, config.pk), displayTableValue(second, state.sortColumn, config.pk)) * direction);
   }
 
   state.filteredRows = rows;
@@ -650,6 +714,7 @@ function filterEntityRows() {
     sortable: true,
     sortColumn: state.sortColumn,
     sortDirection: state.sortDirection,
+    primaryKey: config.pk,
     onSort: column => toggleSort(column),
     onRowClick: record => openRecordModal(record)
   });
@@ -690,7 +755,8 @@ async function createFormControl(fieldConfig, currentValue, editing) {
     (data || []).forEach(item => {
       const option = document.createElement("option");
       option.value = item[fieldConfig.lookup.valueField];
-      option.textContent = `${item[fieldConfig.lookup.valueField]} - ${formatDisplayValue(item[fieldConfig.lookup.labelField])}`;
+      const mappedLabel = state.lookupMaps[relationMapKey(fieldConfig.name)]?.get(String(item[fieldConfig.lookup.valueField]));
+      option.textContent = mappedLabel || formatDisplayValue(item[fieldConfig.lookup.labelField]);
       control.appendChild(option);
     });
   } else if (fieldConfig.choices) {
@@ -826,6 +892,7 @@ async function saveRecord(event) {
 
   showToast(state.selectedRecord ? "Record updated." : "Record added.");
   closeRecordModal();
+  await loadLookupMaps();
   await loadEntityRows();
 }
 
@@ -845,6 +912,7 @@ async function deleteRecord() {
 
   showToast("Record deleted.");
   closeRecordModal();
+  await loadLookupMaps();
   await loadEntityRows();
 }
 
@@ -853,14 +921,14 @@ function csvValue(value) {
   return `"${text}"`;
 }
 
-function downloadCsv(rows, filename) {
+function downloadCsv(rows, filename, primaryKey = null) {
   if (!rows.length) {
     showToast("There are no rows to export.", true);
     return;
   }
   const columns = Object.keys(rows[0]);
-  const lines = [columns.map(csvValue).join(",")];
-  rows.forEach(row => lines.push(columns.map(column => csvValue(row[column])).join(",")));
+  const lines = [columns.map(column => csvValue(displayColumnLabel(column, primaryKey))).join(",")];
+  rows.forEach(row => lines.push(columns.map(column => csvValue(displayTableValue(row, column, primaryKey))).join(",")));
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -909,11 +977,11 @@ async function runReport() {
 function filterReportRows() {
   const search = elements.reportSearch.value.trim().toLowerCase();
   let rows = search
-    ? state.reportRows.filter(row => Object.values(row).some(value => formatDisplayValue(value).toLowerCase().includes(search)))
+    ? state.reportRows.filter(row => Object.keys(row).some(column => displayTableValue(row, column).toLowerCase().includes(search)))
     : [...state.reportRows];
   if (state.reportSortColumn) {
     const direction = state.reportSortDirection === "asc" ? 1 : -1;
-    rows.sort((first, second) => compareValues(first[state.reportSortColumn], second[state.reportSortColumn]) * direction);
+    rows.sort((first, second) => compareValues(displayTableValue(first, state.reportSortColumn), displayTableValue(second, state.reportSortColumn)) * direction);
   }
   state.reportFilteredRows = rows;
   createTable(elements.reportHead, elements.reportBody, rows, {
@@ -935,6 +1003,7 @@ function applyTheme(theme) {
 
 async function refreshCurrentPage() {
   elements.refreshCurrentButton.disabled = true;
+  await loadLookupMaps();
   if (state.currentPageType === "dashboard") await openDashboard();
   if (state.currentPageType === "entity") await loadEntityRows();
   if (state.currentPageType === "reports") await runReport();
@@ -970,6 +1039,7 @@ async function initializeApp() {
   }
 
   state.profile = profileResult.data;
+  await loadLookupMaps();
   elements.staffEmail.textContent = data.user.email;
   elements.staffName.textContent = profileResult.data.full_name;
   elements.staffAvatar.textContent = profileResult.data.full_name.trim().charAt(0).toUpperCase() || "S";
@@ -1024,8 +1094,9 @@ elements.nextPage.addEventListener("click", () => {
   filterEntityRows();
 });
 document.getElementById("export-button").addEventListener("click", () => {
-  const filename = `${ENTITIES[state.currentEntityName].table}.csv`;
-  downloadCsv(state.filteredRows, filename);
+  const config = ENTITIES[state.currentEntityName];
+  const filename = `${config.table}.csv`;
+  downloadCsv(state.filteredRows, filename, config.pk);
 });
 document.getElementById("run-report-button").addEventListener("click", runReport);
 elements.reportSelect.addEventListener("change", runReport);
